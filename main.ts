@@ -25,7 +25,21 @@ async function handleManualTest(request: Request) {
   console.log('Manual test endpoint called');
   
   try {
-    const formData = await request.json();
+    let formData;
+    try {
+      formData = await request.json();
+    } catch (jsonError) {
+      console.error('JSON parse error:', jsonError);
+      return new Response(JSON.stringify({
+        success: false,
+        error: 'Invalid JSON in request body',
+        details: jsonError.message
+      }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+    
     console.log('Received form data:', JSON.stringify(formData, null, 2));
     
     const { botToken, chatId, message } = formData;
@@ -34,7 +48,12 @@ async function handleManualTest(request: Request) {
       console.error('Missing required fields');
       return new Response(JSON.stringify({
         success: false,
-        error: 'Missing required fields'
+        error: 'Missing required fields',
+        received: { 
+          hasBotToken: !!botToken, 
+          hasChatId: !!chatId, 
+          hasMessage: !!message 
+        }
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }
@@ -42,6 +61,8 @@ async function handleManualTest(request: Request) {
     }
 
     console.log('Attempting to send to Telegram...');
+    console.log('Bot token (first 10 chars):', botToken.substring(0, 10) + '...');
+    console.log('Chat ID:', chatId);
 
     const telegramUrl = `https://api.telegram.org/bot${botToken}/sendMessage`;
     
@@ -51,13 +72,18 @@ async function handleManualTest(request: Request) {
       parse_mode: 'HTML'
     };
     
+    console.log('Sending to Telegram...');
+    
     const response = await fetch(telegramUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(telegramPayload)
     });
 
+    console.log('Telegram response status:', response.status);
+    
     const result = await response.json();
+    console.log('Telegram response:', JSON.stringify(result, null, 2));
 
     if (!result.ok) {
       console.error('Telegram API returned error:', result);
@@ -67,7 +93,7 @@ async function handleManualTest(request: Request) {
         errorCode: result.error_code,
         details: result
       }), {
-        status: 400,
+        status: 200, // Changed to 200 so frontend can parse the error
         headers: { 'Content-Type': 'application/json' }
       });
     }
@@ -78,6 +104,7 @@ async function handleManualTest(request: Request) {
       message: 'Message sent successfully!',
       telegramResponse: result
     }), {
+      status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
 
@@ -86,9 +113,10 @@ async function handleManualTest(request: Request) {
     
     return new Response(JSON.stringify({
       success: false,
-      error: error.message
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
     }), {
-      status: 500,
+      status: 200, // Changed to 200 so frontend can parse the error
       headers: { 'Content-Type': 'application/json' }
     });
   }
@@ -144,7 +172,10 @@ async function handleWebhook(request: Request) {
     
   } catch (error) {
     console.error('Error in webhook handler:', error);
-    return new Response(JSON.stringify({ error: 'Error processing webhook' }), {
+    return new Response(JSON.stringify({ 
+      error: 'Error processing webhook',
+      details: error instanceof Error ? error.message : 'Unknown error'
+    }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' }
     });
@@ -607,11 +638,15 @@ If you see this, your bot is working correctly. ✅</textarea>
       result.style.display = 'none';
       
       try {
+        console.log('Submitting form...');
+        
         const payload = {
           botToken: document.getElementById('botToken').value.trim(),
           chatId: document.getElementById('chatId').value.trim(),
           message: document.getElementById('message').value
         };
+        
+        console.log('Payload:', payload);
         
         const response = await fetch('/test', {
           method: 'POST',
@@ -619,7 +654,11 @@ If you see this, your bot is working correctly. ✅</textarea>
           body: JSON.stringify(payload)
         });
         
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
         const data = await response.json();
+        console.log('Response data:', data);
         
         if (data.success) {
           result.className = 'result success';
@@ -636,6 +675,7 @@ If you see this, your bot is working correctly. ✅</textarea>
           result.textContent = errorMsg;
         }
       } catch (error) {
+        console.error('Fetch error:', error);
         result.className = 'result error';
         result.textContent = '❌ Request failed: ' + error.message;
       } finally {
