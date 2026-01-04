@@ -1,10 +1,25 @@
 Deno.serve(async (request: Request) => {
   const url = new URL(request.url);
 
+  // Handle CORS preflight
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
+  }
+
   // Serve the frontend UI
   if (request.method === 'GET' && url.pathname === '/') {
     return new Response(getHTML(), {
-      headers: { 'Content-Type': 'text/html' }
+      headers: { 
+        'Content-Type': 'text/html',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
   }
 
@@ -25,22 +40,28 @@ async function handleManualTest(request: Request) {
   console.log('Manual test endpoint called');
   
   try {
+    const text = await request.text();
+    console.log('Raw request body:', text);
+    
     let formData;
     try {
-      formData = await request.json();
+      formData = JSON.parse(text);
     } catch (jsonError) {
       console.error('JSON parse error:', jsonError);
       return new Response(JSON.stringify({
         success: false,
         error: 'Invalid JSON in request body',
-        details: jsonError.message
+        receivedData: text.substring(0, 100)
       }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        status: 200,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
       });
     }
     
-    console.log('Received form data:', JSON.stringify(formData, null, 2));
+    console.log('Parsed form data:', JSON.stringify(formData, null, 2));
     
     const { botToken, chatId, message } = formData;
 
@@ -55,8 +76,11 @@ async function handleManualTest(request: Request) {
           hasMessage: !!message 
         }
       }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' }
+        status: 200,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
       });
     }
 
@@ -93,8 +117,11 @@ async function handleManualTest(request: Request) {
         errorCode: result.error_code,
         details: result
       }), {
-        status: 200, // Changed to 200 so frontend can parse the error
-        headers: { 'Content-Type': 'application/json' }
+        status: 200,
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
       });
     }
 
@@ -105,7 +132,10 @@ async function handleManualTest(request: Request) {
       telegramResponse: result
     }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
 
   } catch (error) {
@@ -116,8 +146,11 @@ async function handleManualTest(request: Request) {
       error: error instanceof Error ? error.message : 'Unknown error',
       stack: error instanceof Error ? error.stack : undefined
     }), {
-      status: 200, // Changed to 200 so frontend can parse the error
-      headers: { 'Content-Type': 'application/json' }
+      status: 200,
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
   }
 }
@@ -139,7 +172,10 @@ async function handleWebhook(request: Request) {
       console.error('Unauthorized webhook attempt');
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*'
+        }
       });
     }
 
@@ -167,7 +203,10 @@ async function handleWebhook(request: Request) {
       event: payload.event
     }), {
       status: 200,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
     
   } catch (error) {
@@ -177,7 +216,10 @@ async function handleWebhook(request: Request) {
       details: error instanceof Error ? error.message : 'Unknown error'
     }), {
       status: 400,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      }
     });
   }
 }
@@ -655,7 +697,7 @@ If you see this, your bot is working correctly. ✅</textarea>
         });
         
         console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
+        console.log('Response headers:', [...response.headers.entries()]);
         
         const data = await response.json();
         console.log('Response data:', data);
@@ -671,6 +713,9 @@ If you see this, your bot is working correctly. ✅</textarea>
           }
           if (data.details) {
             errorMsg += '\\n\\nDetails: ' + JSON.stringify(data.details, null, 2);
+          }
+          if (data.receivedData) {
+            errorMsg += '\\n\\nReceived: ' + data.receivedData;
           }
           result.textContent = errorMsg;
         }
